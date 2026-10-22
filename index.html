@@ -34,19 +34,20 @@ button{cursor:pointer}
 [hidden]{display:none!important}
 .digital{font-family:var(--digital);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.04em}
 
-.app{height:100%;display:flex;flex-direction:column;max-width:560px;margin:0 auto;
+.app{height:100%;display:flex;flex-direction:column;justify-content:center;gap:4px;max-width:900px;margin:0 auto;
   padding:calc(env(safe-area-inset-top,0px) + 18px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px,env(safe-area-inset-left,0px))}
 .now{text-align:center}
 .now small{display:block;font-size:.8rem;color:var(--muted)}
 .now .digital{font-size:clamp(1.6rem,8vw,2.2rem)}
-.dial{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px 0}
-.dial svg{width:100%;height:100%;max-width:420px;max-height:100%;display:block;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.dial{flex:none;display:flex;align-items:center;justify-content:center}
+/* 다이얼은 화면에 맞춰 최대한 크게, 위아래 시계와 바로 붙게 */
+.dial svg{width:min(100%,calc(100dvh - 330px),720px);min-width:220px;aspect-ratio:1;height:auto;display:block;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
 .remain{text-align:center}
 .remain small{display:block;font-size:.8rem;color:var(--muted)}
 .remain .digital{font-size:clamp(2.6rem,15vw,4rem);color:var(--red);line-height:1.15}
 .remain.paused .digital{animation:blink 1.2s steps(2,start) infinite}
 @keyframes blink{to{opacity:.35}}
-.ctrl{display:grid;grid-template-columns:60px 1fr 60px;gap:14px;align-items:center;margin-top:16px}
+.ctrl{display:grid;grid-template-columns:60px 1fr 60px;gap:14px;align-items:center;margin-top:14px;width:100%;max-width:520px;align-self:center}
 .round{width:60px;height:60px;border-radius:50%;border:0;background:var(--surface);box-shadow:var(--shadow);display:grid;place-items:center;font-size:1.4rem;color:var(--red)}
 .round svg{width:26px;height:26px}
 .go{height:60px;border:0;border-radius:99px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:1.15rem;box-shadow:0 6px 16px rgb(196 64 58 / .35)}
