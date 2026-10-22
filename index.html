@@ -109,10 +109,14 @@ button{cursor:pointer}
 .step{border-radius:14px;background:var(--bg);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .step-top{display:flex;align-items:center;gap:8px}
 .step-no{flex:none;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;display:grid;place-items:center;font-size:.8rem;font-weight:700}
-.mini{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
-.mini button{flex:none;width:40px;height:40px;border:0;border-radius:12px;background:var(--red-tint);color:var(--red);font-weight:700;font-size:1.2rem}
-.field .mini input,.mini input{width:4.2em;flex:none;border:0;border-radius:10px;background:var(--surface);padding:8px 6px;font-size:1.1rem;text-align:center}
-.mini span{color:var(--muted);font-size:.9rem}
+.mini{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.mini button{flex:none;width:36px;height:40px;border:0;border-radius:12px;background:var(--red-tint);color:var(--red);font-weight:700;font-size:1.2rem}
+.field .mini input,.mini input{width:2.9em;flex:none;border:0;border-radius:10px;background:var(--surface);padding:8px 6px;font-size:1.1rem;text-align:center}
+.mini span{color:var(--muted);font-size:.85rem;white-space:nowrap}
+.end{display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);white-space:nowrap}
+.end label{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.end input{border:0;border-radius:10px;background:var(--surface);padding:7px 10px;font-size:1rem;min-width:7.4em;flex:1 0 auto;max-width:11em}
+.end small{font-size:.74rem;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
 .del{flex:none;border:0;background:none;color:var(--muted);font-size:1.1rem;width:40px;height:40px;border-radius:50%}
 .step input.say{border:0;border-radius:10px;background:var(--surface);padding:9px 11px;font-size:.98rem;width:100%;min-width:0}
 .total{font-size:.85rem;color:var(--muted);margin:0}
@@ -396,6 +400,7 @@ function openSettings() {
     <div class="group"><h3><i>6</i>연속 타이머</h3>
       <label class="toggle"><span>여러 타이머를 차례로 실행</span><span class="sw"><input type="checkbox" id="sSeqOn"><i></i></span></label>
       <p class="hint">한 타이머가 끝나면 짧게 울리고 적어 둔 말을 읽어 준 뒤, 다음 타이머가 바로 시작돼요. 마지막 타이머가 끝나면 알람이 울려요.</p>
+      <p class="hint">각 타이머는 시간·분으로 정하거나 <b>끝나는 시각</b>으로 정할 수 있어요. 멈춰 있을 때 끝나는 시각은 <b>지금 시작한다고 보고</b> 계산돼요.</p>
       <div id="sSeqBox">
         <div class="seq" id="sSeq"></div>
         <div class="row" style="margin-top:10px;align-items:center;justify-content:space-between"><button class="btn light" type="button" id="sSeqAdd">＋ 타이머 추가</button><p class="total" id="sSeqTotal"></p></div>
@@ -459,15 +464,42 @@ function openSettings() {
     q("#sSeq").innerHTML = st.seq.map((x, i) => `
       <div class="step" data-i="${i}">
         <div class="step-top"><span class="step-no">${i + 1}</span>
-          <span class="mini"><button type="button" data-a="minus" aria-label="1분 줄이기">−</button><input type="number" inputmode="numeric" min="1" max="${MAX_MIN}" value="${x.min}" data-a="min" aria-label="${i + 1}번째 타이머 분"><span>분</span><button type="button" data-a="plus" aria-label="1분 늘리기">＋</button></span>
+          <span class="mini"><button type="button" data-a="minus" aria-label="1분 줄이기">−</button><input type="number" inputmode="numeric" min="0" max="12" value="${Math.floor(x.min / 60)}" data-a="h" aria-label="${i + 1}번째 타이머 시간"><span>시간</span><input type="number" inputmode="numeric" min="0" max="59" value="${x.min % 60}" data-a="m" aria-label="${i + 1}번째 타이머 분"><span>분</span><button type="button" data-a="plus" aria-label="1분 늘리기">＋</button></span></div>
+        <div class="end"><label>끝나는 시각 <input type="time" data-a="end" aria-label="${i + 1}번째 타이머 끝나는 시각"></label>
           <button class="del" type="button" data-a="del" aria-label="${i + 1}번째 타이머 지우기" ${st.seq.length < 2 ? "disabled" : ""}>🗑</button></div>
         <input class="say" data-a="say" maxlength="80" placeholder="끝날 때 읽어 줄 말 (비우면 '${i + 1}번째 타이머가 끝났어요')" aria-label="${i + 1}번째 타이머 끝날 때 읽어 줄 말">
       </div>`).join("");
     s.querySelectorAll(".step input.say").forEach((inp, i) => { inp.value = st.seq[i].say; });
+    showEnds();
     const total = st.seq.reduce((a, x) => a + x.min, 0);
     q("#sSeqTotal").textContent = `${st.seq.length}개 · 모두 ${minText(total)}`;
     q("#sRepeat").checked = st.repeat;
   };
+  /** i번째 타이머가 시작하는 때(ms). 이미 지난 타이머는 null. 멈춰 있으면 지금 시작한다고 보고 센다. */
+  const stepStart = i => {
+    const ms = j => st.seq[j].min * 60000, idx = st.seqIdx;
+    if (st.status === "idle") { let t = Date.now(); for (let j = 0; j < i; j++) t += ms(j); return t; }
+    if (i < idx) return null;
+    const curEnd = st.status === "running" ? st.endAt : Date.now() + st.leftMs;
+    if (i === idx) return curEnd - ms(idx);
+    let t = curEnd; for (let j = idx + 1; j < i; j++) t += ms(j); return t;
+  };
+  const showEnds = () => {
+    s.querySelectorAll(".step").forEach((el, i) => {
+      const inp = el.querySelector('[data-a="end"]'), start = stepStart(i);
+      if (start === null) { inp.value = ""; inp.disabled = true; return; }
+      inp.disabled = false;
+      if (document.activeElement !== inp) { const e = new Date(start + st.seq[i].min * 60000); inp.value = `${pad(e.getHours())}:${pad(e.getMinutes())}`; }
+    });
+  };
+  /** i번째 타이머 길이를 바꾼다. 지금 가고 있는 타이머면 끝나는 때도 같이 옮긴다. */
+  const setStep = (i, min) => {
+    const m = Math.max(1, Math.min(MAX_MIN, Math.round(min))), diff = (m - st.seq[i].min) * 60000;
+    st.seq[i].min = m;
+    if (i === st.seqIdx && st.status === "running") { st.endAt += diff; save(); render(); return; }
+    seqChanged();
+  };
+  const tickEnds = setInterval(() => { if (!s.isConnected) clearInterval(tickEnds); else showEnds(); }, 20000);
   const seqChanged = () => {   // 목록이 바뀌면 멈춘 상태에서 첫 타이머부터 다시 준비한다
     if (st.status !== "running") { st.status = "idle"; st.seqIdx = Math.min(st.seqIdx, st.seq.length - 1); st.leftMs = curMin() * 60000; }
     save(); render();
@@ -482,7 +514,7 @@ function openSettings() {
   q("#sSeq").addEventListener("click", e => {
     const a = e.target.dataset.a, i = +e.target.closest(".step")?.dataset.i;
     if (!a || isNaN(i)) return;
-    if (a === "minus" || a === "plus") { st.seq[i].min = Math.max(1, Math.min(MAX_MIN, st.seq[i].min + (a === "plus" ? 1 : -1))); seqChanged(); drawSeq(); }
+    if (a === "minus" || a === "plus") { setStep(i, st.seq[i].min + (a === "plus" ? 1 : -1)); drawSeq(); }
     if (a === "del" && st.seq.length > 1) {
       st.seq.splice(i, 1);
       if (st.seqIdx >= st.seq.length) st.seqIdx = st.seq.length - 1;
@@ -491,7 +523,25 @@ function openSettings() {
   });
   q("#sSeq").addEventListener("change", e => {
     const i = +e.target.closest(".step")?.dataset.i;
-    if (e.target.dataset.a === "min") { const v = parseInt(e.target.value, 10); st.seq[i].min = Math.max(1, Math.min(MAX_MIN, v || 1)); seqChanged(); drawSeq(); }
+    const a = e.target.dataset.a;
+    if (a === "h" || a === "m") {
+      const row = e.target.closest(".step");
+      const h = parseInt(row.querySelector('[data-a="h"]').value, 10) || 0, m = parseInt(row.querySelector('[data-a="m"]').value, 10) || 0;
+      if (h * 60 + m < 1) toast("1분 이상으로 정해 주세요");
+      else if (h * 60 + m > MAX_MIN) toast("최대 12시간까지 정할 수 있어요");
+      setStep(i, h * 60 + m); drawSeq();
+    }
+    if (a === "end" && e.target.value) {
+      const start = stepStart(i);
+      if (start === null) return;
+      const [hh, mm] = e.target.value.split(":").map(Number), end = new Date(start);
+      end.setHours(hh, mm, 0, 0);
+      if (end.getTime() <= start) end.setDate(end.getDate() + 1);   // 시작보다 이른 시각이면 다음 날
+      const min = Math.ceil((end.getTime() - start) / 60000);
+      if (min > MAX_MIN) { toast("12시간 안의 시각으로 골라 주세요"); showEnds(); return; }
+      setStep(i, min); drawSeq();
+      toast(`${i + 1}번째 타이머를 ${pad(hh)}:${pad(mm)}까지 ${minText(st.seq[i].min)}으로 맞췄어요`);
+    }
   });
   q("#sSeq").addEventListener("input", e => {
     const i = +e.target.closest(".step")?.dataset.i;
