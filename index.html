@@ -42,7 +42,7 @@ button{cursor:pointer}
 .now .digital{font-size:clamp(2.6rem,15vw,4.6rem)}
 .dial{flex:none;display:flex;align-items:center;justify-content:center}
 /* 다이얼은 화면에 맞춰 최대한 크게, 위아래 시계와 바로 붙게 */
-.dial svg{width:min(100%,calc(100dvh - 330px),720px);min-width:220px;aspect-ratio:1;height:auto;display:block;touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+.dial svg{width:min(100%,calc(100dvh - 330px),720px);min-width:220px;aspect-ratio:1;height:auto;display:block;user-select:none;-webkit-user-select:none;pointer-events:none}
 .remain{text-align:center}
 .remain small{display:block;font-size:.8rem;color:var(--muted)}
 .remain .digital{font-size:clamp(2.3rem,13vw,4.2rem)}
@@ -127,7 +127,7 @@ button{cursor:pointer}
 <body>
 <main class="app">
   <div class="now"><small id="nowDate"></small><span class="digital" id="nowClock">0:00</span></div>
-  <div class="dial"><svg id="dial" viewBox="-172 -172 344 344" role="slider" aria-label="타이머 시간 (분)" aria-valuemin="0" aria-valuemax="60" tabindex="0"></svg></div>
+  <div class="dial"><svg id="dial" viewBox="-172 -172 344 344" role="img" aria-label="남은 시간 다이얼"></svg></div>
   <div class="remain" id="remainBox"><small id="remainLabel">남은 시간</small><span class="digital" id="remain">25:00</span><span class="next" id="nextInfo"></span></div>
   <div class="ctrl">
     <button class="round" id="btnReset" aria-label="처음으로"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></button>
@@ -190,7 +190,6 @@ function drawDial(ms) {
   else if (a <= 0) wedge.setAttribute("d", "");
   else { const [x, y] = pol(a, R); wedge.setAttribute("d", `M0,0L0,${-R}A${R},${R} 0 ${a > 180 ? 1 : 0} 1 ${x},${y}Z`); }
   const [kx, ky] = pol(a, R); knob.setAttribute("cx", kx); knob.setAttribute("cy", ky);
-  svg.setAttribute("aria-valuenow", Math.round(Math.min(min, 60)));
 }
 
 /* ---------- 화면 그리기 ---------- */
@@ -265,24 +264,7 @@ function setMinutes(min) {
 $("#btnGo").onclick = () => st.status === "running" ? pause() : start();
 $("#btnReset").onclick = reset;
 
-/* 다이얼을 끌어서 1분 단위로 정하기 */
-let dragging = false;
-function fromPointer(e) {
-  const r = svg.getBoundingClientRect(), x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
-  let deg = Math.atan2(x, -y) * 180 / Math.PI; if (deg < 0) deg += 360;
-  let m = Math.round(deg / 6);
-  if (m === 0) m = dragging === "high" ? 60 : 1;   // 12시 근처: 위에서 끌어오면 60분, 아니면 1분
-  dragging = m >= 45 ? "high" : true;
-  setMinutes(m);
-}
-svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); fromPointer(e); });
-svg.addEventListener("pointermove", e => { if (dragging) fromPointer(e); });
-svg.addEventListener("pointerup", () => { dragging = false; });
-svg.addEventListener("pointercancel", () => { dragging = false; });
-svg.addEventListener("keydown", e => {
-  if (e.key === "ArrowUp" || e.key === "ArrowRight") { setMinutes(curMin() + 1); e.preventDefault(); }
-  if (e.key === "ArrowDown" || e.key === "ArrowLeft") { setMinutes(curMin() - 1); e.preventDefault(); }
-});
+/* 다이얼은 보여 주기만 한다. 실수로 터치해도 시간이 바뀌지 않게, 시간은 설정에서만 바꾼다. */
 
 /* ---------- 5. 화면 켜짐 유지 ---------- */
 let lock = null;
