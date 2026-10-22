@@ -183,13 +183,11 @@ for (let m = 0; m < 60; m++) {
   if (major) { const [tx, ty] = pol(a, 156); el("text", { x: tx, y: ty + 6, "text-anchor": "middle", "font-size": 17, "font-weight": 700, fill: "var(--accent)", "font-family": "var(--body)" }).textContent = m; }
 }
 const wedge = el("path", { fill: "var(--accent)" });
-const knob = el("circle", { r: 11, fill: "#fff", stroke: "#9a9296", "stroke-width": 1.5 });
 function drawDial(ms) {
   const min = ms / 60000, a = Math.min(min, 60) / 60 * 360;
   if (a >= 359.99) wedge.setAttribute("d", `M0,${-R}A${R},${R} 0 1 1 -0.01,${-R}Z`);
   else if (a <= 0) wedge.setAttribute("d", "");
   else { const [x, y] = pol(a, R); wedge.setAttribute("d", `M0,0L0,${-R}A${R},${R} 0 ${a > 180 ? 1 : 0} 1 ${x},${y}Z`); }
-  const [kx, ky] = pol(a, R); knob.setAttribute("cx", kx); knob.setAttribute("cy", ky);
 }
 
 /* ---------- 화면 그리기 ---------- */
