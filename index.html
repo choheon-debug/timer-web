@@ -233,24 +233,75 @@ function advance() {
 const stepless = () => st.say.trim() || DEFAULT_SAY;
 
 /* ---------- 시작 · 일시정지 · 처음으로 ---------- */
-let audio = null;
+/* ---------- 잠금화면에서도 울리게 ----------
+   웹앱은 화면이 잠기면 소리를 낼 수 없지만, 이미 틀어 둔 음악은 잠금화면에서도 계속 나온다.
+   그래서 타이머가 가는 동안 소리 없는 음악을 틀어 두고, 시간이 되면 같은 음악을 알람 소리로 바꾼다. */
+function wav(rate, seconds, sample) {
+  const n = Math.round(rate * seconds), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const text = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  text(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); text(8, "WAVE"); text(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); text(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, sample(i / rate))) * 32767, true);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+const SILENCE = wav(8000, 2, () => 0);
+const ALARM = wav(16000, 1.5, t => {   // 삐삐삐 세 번, 그다음은 잠깐 조용
+  const k = Math.floor(t / 0.22), x = t - k * 0.22;
+  if (k > 2 || x > 0.16) return 0;
+  return 0.7 * Math.min(1, x / 0.01, (0.16 - x) / 0.02) * Math.sin(2 * Math.PI * 880 * t);
+});
+const bg = new Audio();
+bg.setAttribute("playsinline", "");
+let bgMode = "";   // "silence" 기다리는 중 · "alarm" 끝 알람(반복) · "step" 연속 타이머 중간 알림(한 번)
+function bgPlay(mode) {
+  bgMode = mode;
+  const src = mode === "silence" ? SILENCE : ALARM;
+  if (bg.src !== src) bg.src = src;
+  bg.loop = mode !== "step"; bg.currentTime = 0;
+  bg.play().catch(() => {});
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+}
+function bgStop() {
+  bgMode = ""; bg.pause();
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+}
+bg.addEventListener("ended", () => { if (bgMode === "step" && st.status === "running") bgPlay("silence"); });
+// 잠금화면에서는 다른 타이머가 멈춰도 음악 재생 소식은 계속 오므로, 그때마다 시간이 됐는지 본다
+bg.addEventListener("timeupdate", () => { if (st.status === "running" && Date.now() >= st.endAt) advance(); });
+// 잠금화면 음악 조절판에 남은 시간을 보여 주고, 거기서 일시정지·계속도 되게 한다
+function mediaInfo() {
+  if (!("mediaSession" in navigator) || !bgMode || typeof MediaMetadata === "undefined") return;
+  const label = st.status === "running" ? `${fmt(leftNow())} 남음` : bgMode === "alarm" ? "시간이 다 됐어요" : "타이머";
+  navigator.mediaSession.metadata = new MediaMetadata({ title: label, artist: "타이머", artwork: [{ src: "icons/icon-512.png", sizes: "512x512", type: "image/png" }] });
+}
+if ("mediaSession" in navigator) {
+  try {
+    navigator.mediaSession.setActionHandler("pause", () => { if (st.status === "running") pause(); else if (bgMode === "alarm") $("#btnOk").click(); });
+    navigator.mediaSession.setActionHandler("play", () => { if (st.status !== "running") start(); });
+  } catch (e) {}
+}
+setInterval(mediaInfo, 5000);
+// 앱을 다시 연 직전 타이머가 가는 중이면, 처음 화면을 만질 때 소리 없는 음악을 다시 켠다
+document.addEventListener("pointerdown", () => { if (st.status === "running" && !bgMode) bgPlay("silence"); }, true);
+
 function unlockSound() {   // 휴대폰은 버튼을 누를 때 한 번 소리·음성을 깨워 둬야 나중에 울릴 수 있다
-  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
   try { if ("speechSynthesis" in window && !unlockSound.done) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); unlockSound.done = true; } } catch (e) {}
 }
 function start() {
   unlockSound();
   if (st.leftMs <= 0) st.leftMs = curMin() * 60000;
   st.endAt = Date.now() + st.leftMs; st.status = "running"; save();
+  bgPlay("silence"); mediaInfo();
   keepAwake(); cancelAnimationFrame(raf); loop();
 }
 function pause() {
   st.leftMs = leftNow(); st.status = "paused"; save();
-  cancelAnimationFrame(raf); releaseAwake(); render();
+  bgStop(); cancelAnimationFrame(raf); releaseAwake(); render();
 }
 function reset() {
   st.status = "idle"; st.seqIdx = 0; st.leftMs = curMin() * 60000; save();
-  cancelAnimationFrame(raf); releaseAwake(); render();
+  bgStop(); cancelAnimationFrame(raf); releaseAwake(); render();
 }
 /** 설정 시간을 바꾼다. 타이머가 가는 중이면 새 시간으로 계속 간다. */
 function setMinutes(min) {
@@ -282,19 +333,6 @@ document.addEventListener("visibilitychange", () => {
 
 /* ---------- 끝났을 때: 알람 소리 · 진동 · 음성 · 알림 ---------- */
 let alarmTimer = 0, alarmStop = 0;
-function beep() {
-  if (!audio) return;
-  try {
-    const t = audio.currentTime;
-    for (let i = 0; i < 3; i++) {
-      const o = audio.createOscillator(), g = audio.createGain();
-      o.type = "sine"; o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, t + i * 0.22); g.gain.exponentialRampToValueAtTime(0.5, t + i * 0.22 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.22 + 0.16);
-      o.connect(g).connect(audio.destination); o.start(t + i * 0.22); o.stop(t + i * 0.22 + 0.18);
-    }
-  } catch (e) {}
-}
 function speak(text) {
   try {
     if (!("speechSynthesis" in window)) return;
@@ -310,10 +348,10 @@ function finish(text) {
   releaseAwake(); render();
   $("#doneText").textContent = text;
   $("#done").hidden = false; $("#btnOk").focus();
-  try { audio?.resume(); } catch (e) {}
+  bgPlay("alarm"); mediaInfo();
   let n = 0;
   const ring = () => {
-    beep(); navigator.vibrate?.([300, 150, 300]);
+    navigator.vibrate?.([300, 150, 300]);
     if (n % 4 === 1) speak(text);   // 소리 사이사이 음성을 몇 번 읽어 준다
     n++;
   };
@@ -329,8 +367,7 @@ function notifyNow(title, body, sticky) {
 }
 /** 연속 타이머 중간: 짧게 울리고 말해 준 뒤 다음 타이머가 바로 이어진다 */
 function stepAlarm(text) {
-  try { audio?.resume(); } catch (e) {}
-  beep(); setTimeout(beep, 900);
+  bgPlay("step");
   navigator.vibrate?.([300, 150, 300]);
   setTimeout(() => speak(text), 1600);
   const next = `${st.seqIdx + 1}번째 ${minText(st.seq[st.seqIdx].min)} 시작`;
@@ -339,6 +376,7 @@ function stepAlarm(text) {
 }
 function stopAlarm() {
   clearInterval(alarmTimer); clearTimeout(alarmStop);
+  if (bgMode === "alarm") bgStop();
   try { speechSynthesis.cancel(); } catch (e) {}
   navigator.vibrate?.(0);
   navigator.serviceWorker?.ready.then(r => r.getNotifications({ tag: "timer-done" })).then(ns => ns?.forEach(n => n.close())).catch(() => {});
@@ -377,7 +415,7 @@ function openSettings() {
       <label class="toggle"><span><b>4</b>잠금화면에서도 알림</span><span class="sw"><input type="checkbox" id="sNotify"><i></i></span></label>
       <p class="note" id="sNotifyNote" hidden></p>
       <label class="toggle"><span><b>5</b>타이머 중 화면 켜짐 유지</span><span class="sw"><input type="checkbox" id="sAwake"><i></i></span></label>
-      <p class="hint">화면을 켜 두면 끝날 때 소리와 음성이 확실하게 나와요. 화면을 끄거나 잠그면 휴대폰에 따라 늦게 울리거나 안 울릴 수 있어요.</p>
+      <p class="hint">잠금화면에서도 알람이 울리도록, 타이머가 가는 동안 <b>소리 없는 음악</b>을 틀어 둬요. 알람 크기는 <b>음악 볼륨</b>을 따라가요. 다른 음악·영상 앱을 켜면 멈출 수 있어요. 음성 안내는 화면이 켜져 있을 때만 나와요.</p>
     </div>
 
     <div class="group"><h3><i>6</i>연속 타이머</h3>
