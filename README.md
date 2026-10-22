@@ -13,7 +13,7 @@
 - `index.html`: 앱 전체
 - `sw.js`: 오프라인용 서비스 워커. 앱을 고치면 `VERSION`을 올려야 휴대폰에 새 버전이 퍼짐
 - `manifest.webmanifest`, `icons/`: 홈 화면 아이콘
-- `orbitron.woff2`: 디지털 시계 글꼴 Orbitron (SIL Open Font License), 숫자와 콜론만 담은 서브셋
+- `monoton.woff2`: 시계 숫자 글꼴 Monoton (SIL Open Font License), 숫자와 콜론만 담은 서브셋
 
 ## 배포
 GitHub Pages (Settings → Pages → Branch: `main`, 폴더 `/ (root)`).
