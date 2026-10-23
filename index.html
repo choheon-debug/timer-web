@@ -174,7 +174,31 @@ const stepMs = (i, from, first = false) => {
   return !first && ms > SKIP_OVER_MS ? 0 : ms;
 };
 const singleMs = from => st.endClock ? untilClock(st.endClock, from) : st.setMin * 60000;
-const curMs = (from = Date.now()) => useSeq() ? stepMs(st.seqIdx, from, true) : singleMs(from);
+/** ▶ 시작 전(멈춤 상태)에 연속 타이머를 어디서부터 시작할지 정한다.
+    오늘 이미 끝나는 시각이 지난 타이머는 건너뛰고, 아직 안 지난 첫 타이머부터 돈다.
+    (예: 9:38, 10:38, 11:22… 인데 10:00에 시작하면 10:38 타이머부터)
+    시각 없이 시간·분으로 정한 타이머는, 앞의 지난 시각 + 그 시간으로 끝나는 때가 이미 지났으면 건너뛴다.
+    모두 지났으면 첫 타이머부터 (다음 날 그 시각까지) 돈다. */
+function idleStart(from) {
+  let lastEnd = 0;   // 바로 앞에서 이미 지난 타이머가 끝난 때
+  for (let i = 0; i < st.seq.length; i++) {
+    const s = st.seq[i];
+    if (s.end) {
+      const ms = untilClock(s.end, from), [h, m] = s.end.split(":").map(Number), today = new Date(from);
+      today.setHours(h, m, 0, 0);
+      // 오늘 그 시각이 이미 지났고 다음은 내일이면 건너뛴다 (밤 12시를 넘기는 가까운 시각은 그대로 쓴다)
+      if (!(today.getTime() <= from && ms > SKIP_OVER_MS)) { st.seqIdx = i; return ms; }
+      lastEnd = from + ms - 864e5;
+    } else {
+      if (!lastEnd) { st.seqIdx = i; return s.min * 60000; }
+      lastEnd += s.min * 60000;
+      if (lastEnd > from) { st.seqIdx = i; return lastEnd - from; }
+    }
+  }
+  st.seqIdx = 0;
+  return stepMs(0, from, true);
+}
+const curMs = (from = Date.now()) => useSeq() ? (st.status === "idle" ? idleStart(from) : stepMs(st.seqIdx, from, true)) : singleMs(from);
 const curMin = () => Math.ceil(curMs() / 60000);
 const curEnd = () => useSeq() ? st.seq[st.seqIdx].end : st.endClock;
 function clockText(hhmm) { const [h, m] = hhmm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${pad(m)}`; }
