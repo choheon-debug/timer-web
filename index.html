@@ -411,12 +411,25 @@ $("#btnReset").onclick = reset;
 /* 다이얼은 보여 주기만 한다. 실수로 터치해도 시간이 바뀌지 않게, 시간은 설정에서만 바꾼다. */
 
 /* ---------- 5. 화면 켜짐 유지 ---------- */
-let lock = null;
+/* 휴대폰이 화면 켜짐 잠금을 중간에 풀어 버리는 경우가 있다(음악을 새로 틀 때, 앱을 다시 열 때 등).
+   그래서 풀리면 곧바로 다시 잡고, 15초마다·화면을 만질 때마다 잡혀 있는지 확인한다. */
+let lock = null, wanted = false, asking = false;
 async function keepAwake() {
-  if (!st.awake || st.status !== "running" || !("wakeLock" in navigator) || lock) return;
-  try { lock = await navigator.wakeLock.request("screen"); lock.addEventListener("release", () => { lock = null; }); } catch (e) {}
+  wanted = true;
+  if (!st.awake || st.status !== "running" || !("wakeLock" in navigator) || lock || asking || document.hidden) return;
+  asking = true;
+  try {
+    const l = await navigator.wakeLock.request("screen");
+    lock = l;
+    l.addEventListener("release", () => {
+      if (lock === l) lock = null;
+      if (wanted && st.status === "running") setTimeout(keepAwake, 500);   // 저절로 풀렸으면 다시 잡는다
+    });
+  } catch (e) {} finally { asking = false; }
 }
-function releaseAwake() { try { lock?.release(); } catch (e) {} lock = null; }
+function releaseAwake() { wanted = false; const l = lock; lock = null; try { l?.release(); } catch (e) {} }
+setInterval(() => { if (st.status === "running") keepAwake(); }, 15000);
+document.addEventListener("pointerdown", () => { if (st.status === "running") keepAwake(); }, true);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   if (st.status === "running" && Date.now() >= st.endAt) advance();
