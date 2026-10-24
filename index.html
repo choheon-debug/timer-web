@@ -228,9 +228,17 @@ for (let m = 0; m < 60; m++) {
   el("line", { x1, y1, x2, y2, stroke: major ? "var(--accent)" : "var(--accent-soft)", "stroke-width": major ? 3.6 : 2.2, "stroke-linecap": "round" });
   if (major) { const [tx, ty] = pol(a, 156); el("text", { x: tx, y: ty + 6, "text-anchor": "middle", "font-size": 17, "font-weight": 700, fill: "var(--accent)", "font-family": "var(--body)" }).textContent = m; }
 }
-const wedge = el("path", { fill: "var(--accent)" });
+const wedge = el("path", { fill: "var(--accent)", stroke: "#fff", "stroke-width": 1.5, "stroke-linejoin": "round" });
+// 채워진 부분 안의 흰 눈금선: 1분마다, 5분마다 조금 굵게. 바깥이 가장 굵고 가운데로 갈수록 가늘어진다.
+const minuteLines = Array.from({ length: 60 }, (_, m) => {
+  const w = (m % 5 === 0 ? 4.5 : 1.5) / 2, rad = m * 6 * Math.PI / 180;
+  const ex = R * Math.sin(rad), ey = -R * Math.cos(rad), px = Math.cos(rad) * w, py = Math.sin(rad) * w;
+  return el("polygon", { points: `0,0 ${ex + px},${ey + py} ${ex - px},${ey - py}`, fill: "#fff", display: "none" });
+});
 function drawDial(ms) {
   const min = ms / 60000, a = Math.min(min, 60) / 60 * 360;
+  const full = a >= 359.99;
+  minuteLines.forEach((ln, m) => ln.setAttribute("display", (m > 0 || full) && m * 6 < a ? "inline" : "none"));
   if (a >= 359.99) wedge.setAttribute("d", `M0,${-R}A${R},${R} 0 1 1 -0.01,${-R}Z`);
   else if (a <= 0) wedge.setAttribute("d", "");
   else { const [x, y] = pol(a, R); wedge.setAttribute("d", `M0,0L0,${-R}A${R},${R} 0 ${a > 180 ? 1 : 0} 1 ${x},${y}Z`); }
